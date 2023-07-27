@@ -1,0 +1,84 @@
+% Import data from CSV file
+data = csvread('your_data.csv'); % Replace 'your_data.csv' with your actual file name
+X = data(:, 1:end-1); % Input features
+y = data(:, end);     % Target variable
+
+% Normalize the input features
+X_normalized = normalize(X);
+
+% Set up MLP architecture
+hidden_units = 10; % Number of hidden units in the MLP
+input_size = size(X_normalized, 2);
+output_size = 1;
+net = feedforwardnet(hidden_units);
+net.trainParam.showWindow = false;
+
+% Define objective function for regression (mean squared error)
+obj_function = @(weights) mse(net, X_normalized', y');
+
+% Bat Algorithm Parameters
+num_bats = 20;          % Number of bats (agents)
+max_iterations = 100;   % Maximum number of iterations
+A = 1;                  % Loudness (constant or decreasing factor)
+r = 0.5;                % Pulse rate (constant or decreasing factor)
+alpha = 0.9;            % Alpha parameter for position update
+
+% Initialize bat population and velocities
+bats = zeros(num_bats, net.numWeightElements);
+velocities = zeros(num_bats, net.numWeightElements);
+best_position = zeros(size(bats));
+best_fitness = Inf;
+
+% Initialize bats with random positions and velocities
+for i = 1:num_bats
+    bats(i,:) = rand(1, net.numWeightElements) * 2 - 1; % Random initial positions between -1 and 1
+    velocities(i,:) = randn(1, net.numWeightElements);  % Random initial velocities
+end
+
+% Main loop
+for iteration = 1:max_iterations
+    for i = 1:num_bats
+        % Update bat position and velocity
+        velocities(i,:) = velocities(i,:) + (bats(i,:) - best_position) * A;
+        bats(i,:) = bats(i,:) + velocities(i,:);
+
+        % Apply random walk by adding Gaussian noise to positions
+        bats(i,:) = bats(i,:) + randn(1, net.numWeightElements) * r;
+
+        % Repair bat positions to stay within valid range [-1, 1]
+        bats(i,:) = max(-1, min(1, bats(i,:)));
+
+        % Evaluate fitness of the current position
+        fitness = obj_function(bats(i,:));
+
+        % Update the best position and fitness found so far
+        if fitness < best_fitness
+            best_fitness = fitness;
+            best_position = bats(i,:);
+        end
+    end
+    
+    % Update loudness and pulse rate
+    A = alpha * A;
+    r = r * (1 - exp(-iteration));
+    
+    % Display best fitness value at each iteration
+    disp(['Iteration: ', num2str(iteration), ', Best MSE: ', num2str(best_fitness)]);
+end
+
+% Set MLP weights to the best position found by the Bat Algorithm
+net = setwb(net, best_position');
+
+% Train the optimized MLP
+net = train(net, X_normalized', y');
+
+% Predict output using the trained MLP
+predicted_output = net(X_normalized');
+
+% Display results
+disp('Actual Output:');
+disp(y);
+disp('Predicted Output:');
+disp(predicted_output');
+disp('Mean Squared Error:');
+disp(mse(predicted_output', y));
