@@ -1,0 +1,76 @@
+% Load the data from CSV file
+data = csvread('your_data.csv');
+
+% Separate the features (X) and the target variable (Y)
+X = data(:, 1:end-1);
+Y = data(:, end);
+
+% Set the parameters for the bat algorithm and random forest
+n_iterations = 100;     % Number of iterations for the bat algorithm
+n_population = 20;      % Number of bats in the population
+n_features = size(X, 2);% Number of features
+n_trees = 50;           % Number of trees in the random forest
+
+% Initialize the bat algorithm parameters
+A = ones(n_population, n_features);   % Loudness
+r = zeros(n_population, n_features);  % Pulse rate
+F_min = zeros(1, n_population);       % Frequency minimum
+F_max = 2 * ones(1, n_population);    % Frequency maximum
+v = zeros(n_population, n_features);  % Velocity
+
+% Initialize the bat population
+population = rand(n_population, n_features);
+
+% Initialize the best solution and its performance
+best_solution = [];
+best_performance = Inf;
+
+% Perform the bat algorithm optimization
+for iter = 1:n_iterations
+    % Update the frequency for each bat
+    frequency = F_min + (F_max - F_min) .* rand(1, n_population);
+    
+    % Update the velocity and position for each bat
+    v = v + (population - best_solution) .* repmat(frequency, n_population, 1);
+    population = population + v;
+    
+    % Apply the random forest regression on the current population
+    performance = zeros(1, n_population);
+    for i = 1:n_population
+        selected_features = find(population(i, :) > rand(1, n_features));
+        if isempty(selected_features)
+            selected_features = 1;  % Ensure at least one feature is selected
+        end
+        
+        % Train the random forest with the selected features
+        model = TreeBagger(n_trees, X(:, selected_features), Y);
+        
+        % Predict the target variable using the trained model
+        Y_pred = predict(model, X(:, selected_features));
+        
+        % Calculate the performance metric (e.g., mean squared error)
+        performance(i) = mean((Y - str2double(Y_pred)).^2);
+        
+        % Update the best solution if a better one is found
+        if performance(i) < best_performance
+            best_solution = population(i, :);
+            best_performance = performance(i);
+        end
+    end
+    
+    % Update the loudness and pulse rate for each bat
+    A = 0.9 * A;
+    r = (rand(n_population, n_features) < repmat(r, n_population, 1));
+
+    % Update the population based on loudness and pulse rate
+    population = best_solution + A .* (population(best_performance, :) - population) .* r;
+end
+
+% Final selected features based on the best solution
+selected_features = find(best_solution > rand(1, n_features));
+
+% Train the final random forest with the selected features
+final_model = TreeBagger(n_trees, X(:, selected_features), Y);
+
+% Save the model for future predictions
+save('optimized_random_forest_model.mat', 'final_model');
