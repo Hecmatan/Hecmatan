@@ -1,0 +1,72 @@
+% Step 1: Import Data from CSV
+data = csvread('your_data_file.csv'); % Update with your file name
+X = data(:, 1:end-1); % Input features
+Y = data(:, end); % Output labels
+
+% Step 2: Normalize the Data
+X_norm = normalize(X, 'range');
+
+% Step 3: Split the Data into Training and Testing Sets
+train_ratio = 0.8; % Update with your desired training ratio
+[trainInd, testInd] = dividerand(size(X, 1), train_ratio, 1-train_ratio);
+X_train = X_norm(trainInd, :);
+Y_train = Y(trainInd, :);
+X_test = X_norm(testInd, :);
+Y_test = Y(testInd, :);
+
+% Step 4: Initialize ELM Parameters
+input_size = size(X_train, 2);
+hidden_size = 50; % Update with your desired number of hidden neurons
+
+% Step 5: Initialize BA Parameters
+num_bats = 10; % Number of bats
+max_iterations = 100; % Maximum number of iterations
+A = 0.9; % Loudness (constant or decreasing)
+r = 0.9; % Pulse rate (constant or decreasing)
+
+% Step 6: Initialize Random Weights and Biases
+input_weights = rand(hidden_size, input_size) * 2 - 1;
+biases = rand(hidden_size, 1);
+
+% Step 7: Train the ELM using BA Optimization
+best_solution = struct('error', inf, 'weights', [], 'biases', []);
+solutions = repmat(struct('error', inf, 'weights', [], 'biases', []), num_bats, 1);
+velocities = zeros(num_bats, hidden_size + 1);
+
+for t = 1:max_iterations
+    for i = 1:num_bats
+        % Update Weights and Biases
+        velocities(i, :) = velocities(i, :) + (solutions(i).weights - best_solution.weights) * A .* rand(1, hidden_size);
+        new_weights = solutions(i).weights + velocities(i, :);
+        new_biases = solutions(i).biases + r * (best_solution.biases - solutions(i).biases) .* rand(hidden_size, 1);
+        
+        % Evaluate the ELM with Updated Weights and Biases
+        H = tanh(X_train * new_weights' + biases');
+        output_weights = pinv(H) * Y_train;
+        Y_pred_train = H * output_weights;
+        error = mean((Y_train - Y_pred_train).^2);
+        
+        % Update Best Solution
+        if error < best_solution.error
+            best_solution.error = error;
+            best_solution.weights = new_weights;
+            best_solution.biases = new_biases;
+        end
+        
+        % Update Solutions (Local Search)
+        if error < solutions(i).error
+            solutions(i).error = error;
+            solutions(i).weights = new_weights;
+            solutions(i).biases = new_biases;
+        end
+    end
+    
+    % Display Best Error in Each Iteration
+    disp(['Iteration ', num2str(t), ', Best Training Error: ', num2str(best_solution.error)]);
+end
+
+% Step 8: Evaluate the Trained ELM on Test Data
+H_test = tanh(X_test * best_solution.weights' + repmat(best_solution.biases', size(X_test, 1), 1));
+Y_pred_test = H_test * output_weights;
+test_error = mean((Y_test - Y_pred_test).^2);
+disp(['Test Error: ', num2str(test_error)]);
